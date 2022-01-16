@@ -1,3 +1,5 @@
+# By Sergi Valverde (https://github.com/sergivalverde/MAIA_seminar/blob/master/utils.py)
+#########################################################################################
 import os
 import nibabel as nib
 import numpy as np
