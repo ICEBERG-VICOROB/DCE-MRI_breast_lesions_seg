@@ -10,29 +10,22 @@ from torch.optim import Adadelta
 import nibabel as nib
 import SimpleITK as sitk
 import pandas as pd
-from metrics import DSC_seg, TPF_det, PPV_det
+from metrics import DSC_seg
 import csv
 import time as time
-#import ants
-#import niclib as nl
 
-
+#####################################################################################################
 seed = 0
 torch.manual_seed(seed)
 if torch.cuda.is_available():
     torch.cuda.manual_seed_all(seed)
 
 #####################################################################################################
-# define some useful functions
-##############################
-## function to save image array as nifti
+# Define some functions
+########################################
+# function to save image array as nifti
 def save_image(image_arr, image_org, output_file):
-    """Saves image array as nifti.
-    :param image_arr: the image array to be saved as nifti
-    :param image_org: the original image from which spacing, origin...etc is to be copied
-    :param str output_file: the path where to save the nifti image
-    """
-    # create an itk image
+    # create a itk image
     image = sitk.GetImageFromArray(image_arr, isVector=False)
     # Fill basic
     image.SetSpacing(image_org.GetSpacing())
@@ -41,16 +34,18 @@ def save_image(image_arr, image_org, output_file):
     # Write image
     sitk.WriteImage(image, output_file, True)
 
-##############################
-## function to save data in csv file
+########################################
+# function to save data in csv file
 def save_to_csv(filepath, dict_list, append=False):
     """Saves a list of dictionaries as a .csv file.
+
     :param str filepath: the output filepath
     :param List[Dict] dict_list: The data to store as a list of dictionaries.
         Each dictionary will correspond to a row of the .csv file with a column for each key in the dictionaries.
     :param bool append: If True, it will append the contents to an existing file.
 
     :Example:
+
     save_to_csv('data.csv', [{'id': '0', 'score': 0.5}, {'id': '1', 'score': 0.8}])
     """
     assert isinstance(dict_list, list) and all([isinstance(d, dict) for d in dict_list])
@@ -61,10 +56,10 @@ def save_to_csv(filepath, dict_list, append=False):
             csv_writer.writeheader()
         csv_writer.writerows(dict_list)
 
-##############################
-## loss functions:
+########################################
+# loss functions:
 
-## function for dice coefficient
+# function for dice coefficient
 def dice_coef(y_true, y_pred):
     smooth = 1.
 
@@ -75,7 +70,7 @@ def dice_coef(y_true, y_pred):
     return ((2. * intersection + smooth) /
             (tflat.sum() + pflat.sum() + smooth))
 
-## function for dice coefficient for multi-class
+# function for dice coefficient for multi-class
 def dice_coef_multilabel(y_true, y_pred, numLabels=4):
     dice = 0
     for index in range(numLabels):
@@ -83,13 +78,13 @@ def dice_coef_multilabel(y_true, y_pred, numLabels=4):
         dice_total = 4 + dice
     return dice_total
 
-## function for dice coefficient for binary classification
+# function for dice coefficient for binary classification
 def dice_coef_singlelabel(y_true, y_pred):
     index = 1
     dice = -dice_coef(y_true[:, 0, :, :, :] == index, y_pred[:, index, :, :, :])
     return dice
 
-## function for combined cross-entropy and dice loss
+# function for combined cross-entropy and dice loss
 def CE_Dice_loss(y_true, y_pred):
     CE_loss = F.cross_entropy(torch.log(torch.clamp(y_pred, 1E-7, 1.0)),
                                        y_true.squeeze(dim=1).long(), ignore_index=2)
@@ -111,8 +106,8 @@ def CE_Dice_loss(y_true, y_pred):
     sen = (1. * intersection) / ((tflat * tflat).sum() + smooth)
     return 2-dice-sen'''
 
-## Function for Dice-sensitivity loss (by Zhang et al.)
-   " https://github.com/MaciejMazurowski/mri-breast-tumor-segmentation/blob/master/Models_3D.py "
+# Function for Dice-sensitivity loss (by Zhang et al.)
+# https://github.com/MaciejMazurowski/mri-breast-tumor-segmentation/blob/master/Models_3D.py
 def DICESEN_loss(y_true, y_pred):
     smooth = 0.00000001
     #print(y_true.shape,y_pred.shape)
@@ -180,7 +175,6 @@ import torch
 import torch.nn as nn
 from functools import partial
 import torch.nn.functional as F
-
 
 
 class Conv3dAuto(nn.Conv3d):
@@ -279,11 +273,10 @@ class ResNetLayer(nn.Module):
         x = self.blocks(x)
         return x
 
-################################
-
+########################################
 class Unet(nn.Module):
     """
-    Basic U-net model with ResNet basic blocks
+    Basic U-net model
     """
 
     def __init__(self, input_size, output_size, p=0.0):
@@ -410,7 +403,7 @@ class Unet(nn.Module):
         # we use a softmax layer to return probabilities for each class
         out = F.softmax(self.conv8(x7), dim=1)
         return out
-
+#####################################################################################################
 #####################################################################################################
 # Data Preparation
 
@@ -425,13 +418,13 @@ train_split = 0.2
 input_data = ['pre_raw.nii.gz', 'post_last_raw.nii.gz', 'std.nii.gz']
 
 # ground-truth name
-gt_data = 'gt_raw.nii.gz'
+gt_data = 'modified_GT/gt_raw.nii.gz'
 
 # ROI name
 roi_data = 'ROI_2.nii.gz'
 
 #output folder name
-out_name = 'trial_53'
+out_name = 'trial_0000'
 
 # additional options for patch size, sampling step, normalization, etc...
 patch_size = (32, 32, 32)
@@ -447,16 +440,16 @@ num_folds = 5
 num_pos_samples = 2000
 patience_es = 15
 #####################################################################################################
-# To write all info in txt file
+# to write the experiment info in txt file
 
-#first save them in a dictionary
+# first save them in a dictionary
 options = {}
 
 # data path
 options['data_path'] = data_path
 
 # train/validation split percentage
-options[train_split] = train_split
+options['train_split'] = train_split
 
 # input modality names
 options['input_data'] = input_data
@@ -485,18 +478,17 @@ options['num_pos_samples'] = num_pos_samples
 options['patience_es'] = patience_es
 
 
-#then write
+# uncomment the following to save experiment info in txt file
 '''report = os.path.join('/home/rua/codes/modified/models', out_name, 'report.txt')
 f = open(report, 'a')
 f.write('data and training info: \n' + repr(options) + '\n')
 f.close()'''
 #####################################################################################################
-
+# get data paths and specify number of cases per fold
 dataset_paths = [f.path for f in os.scandir(data_path) if f.is_dir()]
 num_cases_per_fold = len(dataset_paths) // num_folds
 
 #####################################################################################################
-
 # training the model
 
 all_metrics = []
@@ -594,18 +586,13 @@ for fold in range(num_folds):
     f.write('******************************** \n')
     f.close()'''
     ####
-    # training the network
 
-    # mkdir for stored models
-    # !mkdir models
+    # uncomment the following line to initialize the early_stopping object
+    '''early_stopping = EarlyStopping(patience=patience_es, verbose=True)'''
 
-    # initialize the early_stopping object
-    early_stopping = EarlyStopping(patience=patience_es, verbose=True)
-
-    # Define the Unet model
-    lesion_model = Unet(input_size=3, output_size=2, p=0.5)
-    model_name = 'test_maia_wmh'
-
+    # Define the U-net model
+    # change input_size according to number of input scans
+    lesion_model = Unet(input_size=3, output_size=2)
 
     # define the torch.device
     device = torch.device('cuda') if gpu_use else torch.device('cpu')
@@ -703,20 +690,21 @@ for fold in range(num_folds):
             val_loss /= (b + 1)
             val_accuracy /= (b + 1)
 
-            #early stop
+            # uncomment to use early stop
             '''checkpoint_out = os.path.join('models', out_name, 'checkpoint_' + 'fold' + str(fold + 1) + '_model' + str(epoch) + '.pt')
             early_stopping(val_loss, lesion_model, checkpoint_out)
             if early_stopping.early_stop:
                 print("Early stopping")
                 break'''
 
+            # print epoch number and losses
             print('Epoch {:d} train_loss {:.4f} train_acc {:.4f} val_loss {:.4f} val_acc {:.4f}'.format(
                 epoch,
                 train_loss,
                 train_accuracy,
                 val_loss,
                 val_accuracy))
-            # write in txt file
+            # uncomment to write epoch number and losses in txt file
             '''f = open(report, 'a')
             f.write('Epoch {:d} train_loss {:.4f} train_acc {:.4f} val_loss {:.4f} val_acc {:.4f}'.format(
                 epoch,
@@ -728,19 +716,21 @@ for fold in range(num_folds):
             ####
 
             # save weights
+            # uncomment to save all models
             '''torch.save(lesion_model.state_dict(),
                        os.path.join('models', out_name, 'fold' + str(fold + 1) + '_model' + str(epoch) + '.pt'))'''
-            if epoch==20:
+            # to save the last model only
+            if epoch == 20:
                 torch.save({
                     'fold': fold,
                     'epoch': epoch,
                     'model_state_dict': lesion_model.state_dict(),
                     'optimizer_state_dict': optimizer.state_dict(),
                     'loss': loss,
-                }, os.path.join('models', out_name, 'fold' + str(fold + 1) + '_model' + str(epoch) + '.pt'))
+                }, os.path.join('/home/rua/codes/modified/models', out_name, 'fold' + str(fold + 1) + '_model' + str(epoch) + '.pt'))
 
-            #t1 = time.time()
-            #print('Total time: ', round((t1 - t0) / 60, 1), 'minutes.\n')
+            t1 = time.time()
+            print('Total time: ', round((t1 - t0) / 60, 1), 'minutes.\n')
 
             # update epochs
             epoch += 1
@@ -755,34 +745,27 @@ for fold in range(num_folds):
 
     print("********************************")
 
-    # write in txt file
+    # uncomment to save total time in txt file
     '''f = open(report, 'a')
     f.write('Total time: '+ str(round((t1 - t0) / 60, 1)) + 'minutes.\n'
             '******************************** \n')
     f.close()'''
-    ####
-    # evaluation
+
+    #####################################################################################################
+    # testing
 
     # obtain a list of test scans
     test_scans = testing_paths
     th = 0.5
 
     # iterate through the scans and evaluate the results
-    # metrics = np.zeros((len(test_scans), 3))
     metrics = np.zeros((len(test_scans), 1))
     csv_path = os.path.join('/home/rua/codes/modified/models', out_name, 'dices.csv')
 
     for i, scan_name in enumerate(test_scans):
         # print("scan name:", scan_name)
-        # scan_path = os.path.join(options['test_path'], scan_name)
         scan_path = os.path.join(test_scans[i], 'post_last_raw.nii.gz')
-        # scan = ants.image_read(scan_path)
-        # print("ants_img size", scan.shape)
         scan = nib.load(scan_path)
-        # print("nib_img size", scan.shape)
-        '''scan2 = sitk.ReadImage(scan_path)
-        scan2_arr = np.array(sitk.GetArrayFromImage(scan2))
-        print("sitk_img size", scan2_arr.shape)'''
 
         infer_patches, coordenates = get_inference_patches(scan_path=test_scans[i],
                                                            input_data=input_data,
@@ -791,20 +774,15 @@ for fold in range(num_folds):
                                                            step=sampling_step,
                                                            normalize=normalize)
 
-        #print(infer_patches.shape)
-        #lesion_out = np.zeros_like(infer_patches).astype('float32')///
         lesion_out = np.zeros((infer_patches.shape[0], 2, infer_patches.shape[2],infer_patches.shape[3],infer_patches.shape[4])).astype('float32')
-        #print(lesion_out.shape)
-        #print(len(lesion_out))
         batch_size = batch_size
 
-        # model evaluation
+        # model testing
         lesion_model.eval()
         with torch.no_grad():
             for b in range(0, len(lesion_out), batch_size):
                 x = torch.tensor(infer_patches[b:b + batch_size]).to(device)
                 pred = lesion_model(x)
-                #print(pred.shape)
                 lesion_out[b:b + batch_size] = pred.cpu().numpy()
 
         # reconstruct image
@@ -824,40 +802,24 @@ for fold in range(num_folds):
         # binarize the results
         lesion_prob = (lesion_prob > th).astype('uint8')
 
-        # save
-        # GT = sitk.ReadImage(os.path.join(test_scans[i], gt_data))
+        # save binary segmentation
         output_file = os.path.join(out, str(s) + "_pred.nii.gz")
-        # print(output_file)
-        '''reshaped = np.transpose(lesion_prob, (2, 1, 0))
-        print("reshaped size", reshaped.shape)
-        save_image(reshaped, scan2, output_file)'''
-        '''new=scan.new_image_like(lesion_prob)
-        ants.image_write(new, output_file)'''
         new = nib.Nifti1Image(lesion_prob, scan.affine, scan.header)
         nib.save(new, output_file)
 
-
-
-        # evaluate the results
-        # gt = ants.image_read(os.path.join(test_scans[i], gt_data))
+        # evaluate and print dice
         gt = nib.load(os.path.join(test_scans[i], gt_data))
         dsc_metric = DSC_seg(gt.get_fdata() == 1, lesion_prob > 0)
-        # dsc_metric = DSC_seg(gt.numpy() == 1, lesion_prob > 0)
-        # tpf_metric = TPF_det(gt.numpy() == 1, lesion_prob > 0)
-        # ppv_metric = PPV_det(gt.numpy() == 1, lesion_prob > 0)
-
-        # metrics[i] = [dsc_metric, tpf_metric, ppv_metric]
         metrics[i] = [dsc_metric]
         all_metrics.append(metrics[i])
 
-        # print('SCAN:', scan_name, 'Dice: ', dsc_metric, 'TPF:', tpf_metric, 'PPV:', ppv_metric)
         print('SCAN:', scan_name, 'Dice: ', dsc_metric)
         # write in txt file
         '''f = open(report, 'a')
         f.write('SCAN:' + str(scan_name) + 'Dice: ' + str(dsc_metric) + '\n')
         f.close()'''
         ##########
-
+        # save dices to csv file
         if (fold == 0) and (i == 0):
             save_to_csv(csv_path, [{'scan id': s, 'dice': dsc_metric}], append=False)
         else:
@@ -865,7 +827,6 @@ for fold in range(num_folds):
 
 
     # we use PANDAS to describe data :)
-    # m = pd.DataFrame(metrics, columns=['DSC', 'TPF', 'PPV'])
     m = pd.DataFrame(metrics, columns=['DSC'])
     print("********************************")
     print(m.describe().T)
